@@ -1,7 +1,9 @@
 // /app/talkSession.tsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-
+import { View, Text, TextInput, Button, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import SessionSelection from "@/components/sessionSelection"
 interface Message {
   id: string;
   text: string;
@@ -16,7 +18,7 @@ const SessionScreen = () => {
   
   // State to hold the input message
   const [inputMessage, setInputMessage] = useState<string>('');
-
+const [sessionStatus, setSessionStatus] = useState<string>(''); 
   // Function to handle sending the message
   const handleSendMessage = () => {
     if (inputMessage.trim()) {
@@ -54,24 +56,31 @@ const SessionScreen = () => {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.container}>
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          inverted // Makes the latest message appear at the bottom
-        />
+      {sessionStatus === ''?  <SessionSelection setSessionStatus={setSessionStatus} />:  
+      <View style={styles.sessionContainer}>
+  
+  <View>
+    
+    <FlatList
+      data={messages}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      inverted // Makes the latest message appear at the bottom
+    />
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type your message"
-            value={inputMessage}
-            onChangeText={setInputMessage}
-          />
-          <Button title="Send" onPress={handleSendMessage} />
-        </View>
-      </View>
+    <View style={styles.inputContainer}>
+      <TextInput
+        style={styles.input}
+        placeholder="Type your message"
+        value={inputMessage}
+        onChangeText={setInputMessage}
+      />
+      <Button title="Send" onPress={handleSendMessage} />
+    </View>
+    </View>
+
+  </View>}
+    
     </KeyboardAvoidingView>
   );
 };
@@ -113,6 +122,11 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 16,
+  },
+  sessionContainer: {
+    flex: 1, // Take full height
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
