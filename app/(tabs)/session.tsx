@@ -1,119 +1,183 @@
-// /app/talkSession.tsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect } from "react"
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Animated,
+  Easing,
+  Dimensions,
+} from "react-native"
+import Ionicons from "@expo/vector-icons/Ionicons"
 
-interface Message {
-  id: string;
-  text: string;
-  sender: string; // "user" or "agent"
-}
+const { height } = Dimensions.get("window") // Get screen height
 
 const SessionScreen = () => {
-  // State to hold the list of messages
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', text: 'Hello! How can I help you today?', sender: 'agent' },
-  ]);
-  
-  // State to hold the input message
-  const [inputMessage, setInputMessage] = useState<string>('');
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const scaleAnim = new Animated.Value(1)
+  const pulseAnim = new Animated.Value(1)
 
-  // Function to handle sending the message
-  const handleSendMessage = () => {
-    if (inputMessage.trim()) {
-      const newMessage: Message = {
-        id: (messages.length + 1).toString(),
-        text: inputMessage,
-        sender: 'user', // Assume the sender is the user
-      };
-      setMessages((prevMessages) => [...prevMessages, newMessage]);
-      setInputMessage(''); // Clear the input field
-      handleAgentResponse(); // Get agent's response
-    }
-  };
-
-  // Simulate agent's response
-  const handleAgentResponse = () => {
-    const agentMessage: Message = {
-      id: (messages.length + 2).toString(),
-      text: 'I\'m here to assist you!',
-      sender: 'agent',
-    };
-    setMessages((prevMessages) => [...prevMessages, agentMessage]);
-  };
-
-  const renderItem = ({ item }: { item: Message }) => (
-    <View
-      style={item.sender === 'user' ? styles.userMessage : styles.agentMessage}
-    >
-      <Text style={styles.messageText}>{item.text}</Text>
-    </View>
-  );
+  // Subtle pulse effect when `isSpeaking` is false
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 800,
+          easing: Easing.ease,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.ease,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start()
+  }, [])
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.container}>
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          inverted // Makes the latest message appear at the bottom
-        />
-
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type your message"
-            value={inputMessage}
-            onChangeText={setInputMessage}
+    <View style={styles.container}>
+      {/* Top Section: Title & Info */}
+      {!isSpeaking && (
+        <View style={styles.header}>
+          <Text style={styles.title}>AI Speaking Session</Text>
+          <Text style={styles.subtitle}>
+            Improve your speaking skills with real-time feedback.
+          </Text>
+          <Ionicons
+            name="information-circle-outline"
+            size={24}
+            color="#888"
+            style={styles.infoIcon}
           />
-          <Button title="Send" onPress={handleSendMessage} />
         </View>
+      )}
+
+      {/* Transcription Section */}
+      <View style={styles.transcriptionContainer}>
+        {isSpeaking ? (
+          <Text style={styles.transcribedText}>Listening...</Text>
+        ) : null}
       </View>
-    </KeyboardAvoidingView>
-  );
-};
+
+      {/* Bottom Section: Microphone & UI */}
+      <View style={styles.bottomContainer}>
+        {/* Voice Waveform Animation (Visible Only When Speaking) */}
+        {isSpeaking && (
+          <Animated.View style={styles.waveform}>
+            {Array.from({ length: 12 }).map((_, index) => (
+              <Animated.View
+                key={index}
+                style={[styles.waveBar, { height: Math.random() * 30 + 10 }]}
+              />
+            ))}
+          </Animated.View>
+        )}
+
+        {/* Microphone Button */}
+        <Pressable
+          style={styles.micButton}
+          onPress={() => setIsSpeaking(!isSpeaking)}
+        >
+          <Animated.View
+            style={[
+              styles.micCircle,
+              { transform: [{ scale: isSpeaking ? scaleAnim : pulseAnim }] },
+            ]}
+          >
+            <Ionicons name="mic-outline" size={40} color="white" />
+          </Animated.View>
+        </Pressable>
+
+        {/* Tap to Start Text (Only When Not Speaking) */}
+        {!isSpeaking && <Text style={styles.tapText}>Tap to Start</Text>}
+      </View>
+    </View>
+  )
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'space-between',
-    padding: 16,
+    backgroundColor: "#F8F9FB", // Light professional background
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 20,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 10,
+  header: {
+    alignItems: "center",
+    paddingTop: 50,
   },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 10,
-    marginRight: 10,
-    backgroundColor: '#f1f1f1',
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#222",
   },
-  userMessage: {
-    backgroundColor: '#d1f7c4',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
-    alignSelf: 'flex-end',
-    maxWidth: '75%',
-  },
-  agentMessage: {
-    backgroundColor: '#f1f1f1',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
-    alignSelf: 'flex-start',
-    maxWidth: '75%',
-  },
-  messageText: {
+  subtitle: {
     fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    paddingHorizontal: 40,
+    marginTop: 5,
   },
-});
+  infoIcon: {
+    marginTop: 10,
+  },
+  transcriptionContainer: {
+    height: height * 0.3, // Takes up the top portion
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  transcribedText: {
+    fontSize: 20,
+    fontWeight: "500",
+    color: "#333",
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  bottomContainer: {
+    alignItems: "center",
+    width: "100%",
+    position: "absolute",
+    bottom: 50, // Moves UI to the bottom
+  },
+  waveform: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "80%",
+    height: 40,
+    marginBottom: 30,
+  },
+  waveBar: {
+    width: 6,
+    backgroundColor: "#7B61FF", // Wave color
+    borderRadius: 3,
+    marginHorizontal: 3,
+  },
+  micButton: {
+    alignItems: "center",
+  },
+  micCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#7B61FF", // Purple mic button
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5,
+    shadowColor: "#7B61FF",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  tapText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#888",
+  },
+})
 
-export default SessionScreen;
+export default SessionScreen
