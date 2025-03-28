@@ -54,7 +54,7 @@ export default function HomePage() {
         const lastMessage = history[history.length - 1];
         if (lastMessage.sender === 'ai') {
           setHasNewMessage(true);
-          setLastMessagePreview(lastMessage.text);
+          setLastMessagePreview(Array.isArray(lastMessage.text) ? lastMessage.text.join(' ') : lastMessage.text);
         }
       }
     } catch (error) {

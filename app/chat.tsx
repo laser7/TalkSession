@@ -281,19 +281,26 @@ export default function ChatScreen() {
     setIsLoading(true)
 
     try {
-      const personalityContext = `You are ${aiProfile.name}, a ${aiProfile.gender} AI friend with a ${aiProfile.personality || 'friendly'} personality${aiProfile.horoscope ? ` and ${aiProfile.horoscope} horoscope` : ''}. Respond in a way that reflects these traits while maintaining a natural conversation.`
+      const aiResponse = await generateAIResponse(inputText, messages)
       
-      const aiResponse = await generateAIResponse(inputText, messages, personalityContext)
-      
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: aiResponse,
-        sender: "ai",
-        timestamp: new Date(),
-        type: "text",
-      }
+      // 处理AI回复，可能是字符串或字符串数组
+      const aiMessages: Message[] = Array.isArray(aiResponse) 
+        ? aiResponse.map((text, index) => ({
+            id: (Date.now() + index + 1).toString(),
+            text,
+            sender: "ai",
+            timestamp: new Date(Date.now() + index * 500), // 添加小延迟使消息时间不同
+            type: "text",
+          }))
+        : [{
+            id: (Date.now() + 1).toString(),
+            text: aiResponse,
+            sender: "ai",
+            timestamp: new Date(),
+            type: "text",
+          }];
 
-      const updatedMessages = [...messages, newMessage, aiMessage]
+      const updatedMessages = [...messages, newMessage, ...aiMessages]
       setMessages(updatedMessages)
       await saveConversationHistory(updatedMessages)
 

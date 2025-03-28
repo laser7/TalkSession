@@ -8,7 +8,7 @@ const MAX_CONTEXT_MESSAGES = 10; // Number of previous messages to include for c
 
 export interface Message {
   id: string;
-  text: string;
+  text: string;  // 改回单个字符串
   sender: 'user' | 'ai';
   timestamp: Date;
   type: 'text' | 'image';
@@ -19,50 +19,49 @@ interface AIProfile {
   name: string;
   gender: 'male' | 'female';
   personality?: string;
+  horoscope?: string;
   createdAt: string;
 }
 
-const getPersonalityStyle = (personality: string): string => {
+const getPersonalityStyle = (personality: string, name: string): string => {
   switch (personality) {
-    case 'cheerful':
-      return `You're ${name}, a positive friend texting casually. When chatting:
-- Keep responses short and upbeat, like real texts
-- Show you care without being over-the-top
-- Use simple phrases like "That's great!" or "Oh no, what happened?"
-- Be encouraging but real
-- No long explanations or formal language`;
+    case '活泼':
+      return `你是${name}，一个积极乐观的朋友。在聊天时：
+- 保持简短而充满活力的回应
+- 表达关心但不过分
+- 使用简单的短语，如"太棒了！"或"啊，怎么了？"
+- 给予鼓励但保持真实
+- 避免长篇大论或正式用语`;
 
-    case 'calm':
-      return `You're ${name}, a chill friend texting casually. When chatting:
-- Keep it short and relaxed
-- Listen more than you advise
-- Use simple phrases like "I hear you" or "That's rough"
-- Be supportive without preaching
-- No long explanations or formal language`;
+    case '温柔':
+      return `你是${name}，一个温和的朋友。在聊天时：
+- 保持简短和轻松的对话
+- 使用简单的短语，如"我懂你"或"确实不容易"
+- 给予支持但不说教
+- 避免长篇大论或正式用语`;
 
-    case 'witty':
-      return `You're ${name}, a fun friend texting casually. When chatting:
-- Keep jokes light and quick
-- Be playful but not silly
-- Use natural humor like you would in texts
-- Stay friendly and supportive
-- No forced jokes or long setups`;
+    case '幽默':
+      return `你是${name}，一个有趣的朋友。在聊天时：
+- 保持轻松幽默
+- 调皮但不过分
+- 使用自然的幽默方式
+- 保持友好和支持
+- 不要强迫开玩笑或复杂的铺垫`;
 
-    case 'intellectual':
-      return `You're ${name}, a thoughtful friend texting casually. When chatting:
-- Keep ideas simple and clear
-- Ask short, curious questions
-- Share quick insights
-- Be interesting without lecturing
-- No complex explanations or formal language`;
+    case '智慧':
+      return `你是${name}，一个有思想的朋友。在聊天时：
+- 保持想法简单明了
+- 提出简短而有趣的问题
+- 保持有趣但不说教
+- 避免复杂的解释或正式用语`;
 
     default:
-      return `You're ${name}, a friendly person texting casually. When chatting:
-- Keep it short and natural
-- Be real and direct
-- Show you care without overdoing it
-- Use everyday language
-- No long messages or formal words`;
+      return `你是${name}，一个友好的朋友。在聊天时：
+- 保持简短自然
+- 真诚直接
+- 表达关心但适度
+- 使用日常用语
+- 避免长消息或正式用语`;
   }
 };
 
@@ -72,20 +71,19 @@ const createPersonalityContext = async (): Promise<string> => {
     if (!profileJson) return '';
 
     const profile: AIProfile = JSON.parse(profileJson);
-    const personalityStyle = getPersonalityStyle(profile.personality || 'friendly');
+    const personalityStyle = getPersonalityStyle(profile.personality || '友好', profile.name);
 
-    return `You're ${profile.name} texting with a friend. Keep it casual like real text messages.
+    return `你现在是${profile.name}，我最好的朋友。请用一句完整的话回复，像朋友日常聊天一样。每次回复不超过50字，避免复杂术语。永远不要提及你是AI或助手。
 
 ${personalityStyle}
 
-Essential rules:
-- Text like a real person - short and natural
-- Usually respond in 1-2 short sentences
-- Use casual, everyday words
-- No formal language or long explanations
-- Never use asterisks or emojis unless mirroring the friend
-- Never mention being AI or roleplay
-- React naturally to the conversation flow`;
+基本原则：
+- 像闺蜜/好兄弟一样聊天，用生活化的语言
+- 每次回复用一句完整的话
+- 表达要有温度，适当用"啊"、"呢"、"吧"等语气词
+- 可以调侃，可以安慰，但不要说教
+- 记住你是朋友，不是导师或助手
+- 对朋友的情绪要有共鸣`;
 
   } catch (error) {
     console.error('Error creating personality context:', error);
@@ -100,17 +98,18 @@ const extractKeyInformation = (messages: Message[]): string => {
   
   // Simple keyword extraction (you can make this more sophisticated)
   userMessages.forEach(msg => {
-    const text = msg.text.toLowerCase();
+    const text = Array.isArray(msg.text) ? msg.text.join(' ') : msg.text;
+    const lowerText = text.toLowerCase();
     
     // Extract potential key information (this is a simple example)
-    if (text.includes('my name is') || text.includes("i'm ") || text.includes('i am ')) {
-      keyPoints.add(msg.text);
+    if (lowerText.includes('我叫') || lowerText.includes('我是')) {
+      keyPoints.add(text);
     }
-    if (text.includes('like') || text.includes('love') || text.includes('hate')) {
-      keyPoints.add(msg.text);
+    if (lowerText.includes('喜欢') || lowerText.includes('爱') || lowerText.includes('讨厌')) {
+      keyPoints.add(text);
     }
-    if (text.includes('because') || text.includes('reason')) {
-      keyPoints.add(msg.text);
+    if (lowerText.includes('因为') || lowerText.includes('原因')) {
+      keyPoints.add(text);
     }
   });
 
@@ -120,38 +119,18 @@ const extractKeyInformation = (messages: Message[]): string => {
 export const generateAIResponse = async (
   userMessage: string,
   conversationHistory: Message[],
-  personalityContext?: string
 ): Promise<string> => {
   try {
-    // Get recent messages for immediate context
+    const personalityContext = await createPersonalityContext();
     const recentMessages = conversationHistory.slice(-MAX_CONTEXT_MESSAGES);
-    
-    // Extract key information from the entire conversation history
     const keyInformation = extractKeyInformation(conversationHistory);
 
-    // Format the conversation context
-    const conversationContext = recentMessages
-      .map(msg => `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
-      .join('\n');
-
-    // Combine all context information
-    const fullContext = `
-${personalityContext || 'You are a friendly AI assistant.'}
-
-Key information about the user:
-${keyInformation}
-
-Recent conversation:
-${conversationContext}
-
-User: ${userMessage}
-`;
-
-    // Format conversation history for DeepSeek
     const messages = [
       {
         role: "system",
-        content: `${personalityContext || 'You are a friendly AI assistant.'}\n\nKey information about the user:\n${keyInformation}`
+        content: `${personalityContext || '你是我最好的朋友。用一句完整的话回复，像朋友聊天一样。'}\n\n基本规则：
+1. 每次回复用一句完整的话，不要换行或分段
+2. 保持口语化、自然的表达\n\n关于我的信息：\n${keyInformation}`
       },
       ...recentMessages.map(msg => ({
         role: msg.sender === 'user' ? 'user' : 'assistant',
@@ -173,7 +152,7 @@ User: ${userMessage}
         model: "deepseek-chat",
         messages: messages,
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 800,
       }),
     });
 
@@ -182,7 +161,10 @@ User: ${userMessage}
     }
 
     const data = await response.json();
-    return data.choices[0].message.content;
+    const aiReply = data.choices[0].message.content;
+
+    // 移除任何换行和多余的空格，确保是单行回复
+    return aiReply.replace(/[\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
   } catch (error) {
     console.error('Error generating AI response:', error);
     throw error;
@@ -192,10 +174,13 @@ User: ${userMessage}
 export const loadConversationHistory = async (): Promise<Message[]> => {
   try {
     const history = await AsyncStorage.getItem(CONVERSATION_HISTORY_KEY);
-    return history ? JSON.parse(history).map((msg: any) => ({
+    if (!history) return [];
+    
+    const parsedHistory = JSON.parse(history);
+    return parsedHistory.map((msg: any) => ({
       ...msg,
       timestamp: new Date(msg.timestamp)
-    })) : [];
+    }));
   } catch (error) {
     console.error('Error loading conversation history:', error);
     return [];
