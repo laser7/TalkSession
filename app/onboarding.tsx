@@ -13,62 +13,72 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+
+interface AIProfile {
+  name: string;
+  gender: 'male' | 'female';
+  personality?: string;
+  horoscope?: string;
+  createdAt: string;
+}
 
 const personalities = [
-  { label: 'Select a personality', value: '' },
-  { label: 'Cheerful & Optimistic', value: 'cheerful' },
-  { label: 'Calm & Supportive', value: 'calm' },
-  { label: 'Witty & Humorous', value: 'witty' },
-  { label: 'Intellectual & Curious', value: 'intellectual' },
+  "友好",
+  "幽默",
+  "温柔",
+  "活泼",
+  "智慧",
+  "浪漫",
+  "冒险",
+  "艺术",
 ];
 
 const horoscopes = [
-  { label: 'Select a horoscope (optional)', value: '' },
-  { label: 'Aries', value: 'Aries' },
-  { label: 'Taurus', value: 'Taurus' },
-  { label: 'Gemini', value: 'Gemini' },
-  { label: 'Cancer', value: 'Cancer' },
-  { label: 'Leo', value: 'Leo' },
-  { label: 'Virgo', value: 'Virgo' },
-  { label: 'Libra', value: 'Libra' },
-  { label: 'Scorpio', value: 'Scorpio' },
-  { label: 'Sagittarius', value: 'Sagittarius' },
-  { label: 'Capricorn', value: 'Capricorn' },
-  { label: 'Aquarius', value: 'Aquarius' },
-  { label: 'Pisces', value: 'Pisces' },
+  "白羊座",
+  "金牛座",
+  "双子座",
+  "巨蟹座",
+  "狮子座",
+  "处女座",
+  "天秤座",
+  "天蝎座",
+  "射手座",
+  "摩羯座",
+  "水瓶座",
+  "双鱼座",
 ];
 
 export default function OnboardingScreen() {
   const [name, setName] = useState('');
-  const [gender, setGender] = useState('');
-  const [personality, setPersonality] = useState('');
-  const [horoscope, setHoroscope] = useState('');
+  const [gender, setGender] = useState<'male' | 'female' | ''>('');
+  const [selectedPersonality, setSelectedPersonality] = useState('');
+  const [selectedHoroscope, setSelectedHoroscope] = useState('');
 
   const handleComplete = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a name for your AI friend');
+      Alert.alert("提示", "请输入AI好友的名字");
       return;
     }
     if (!gender) {
-      Alert.alert('Error', 'Please select a gender for your AI friend');
+      Alert.alert("提示", "请选择性别");
       return;
     }
 
     try {
-      const aiProfile = {
-        name: name.trim(),
+      const profile = {
+        name,
         gender,
-        personality: personality || 'friendly',
-        horoscope: horoscope || undefined,
-        createdAt: new Date().toISOString(),
+        personality: selectedPersonality,
+        horoscope: selectedHoroscope,
+        createdAt: new Date().toISOString()
       };
 
-      await AsyncStorage.setItem('@ai_profile', JSON.stringify(aiProfile));
-      await AsyncStorage.removeItem('@conversation_history');
+      await AsyncStorage.setItem('@ai_profile', JSON.stringify(profile));
       router.replace('/');
     } catch (error) {
       console.error('Error saving AI profile:', error);
-      Alert.alert('Error', 'Failed to save AI profile. Please try again.');
+      Alert.alert("错误", "保存设置失败，请重试。");
     }
   };
 
@@ -78,74 +88,123 @@ export default function OnboardingScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Create Your AI Friend</Text>
-        
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Name</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>创建你的AI好友</Text>
+        </View>
+
+        <View style={styles.form}>
+          <Text style={styles.label}>名字</Text>
           <TextInput
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="Enter a name"
-            placeholderTextColor="#666"
+            placeholder="给你的AI好友起个名字"
+            maxLength={20}
           />
-        </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Gender (Required)</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={gender}
-              onValueChange={(value: string) => setGender(value)}
-              style={styles.picker}
+          <Text style={styles.label}>性别</Text>
+          <View style={styles.genderContainer}>
+            <TouchableOpacity
+              style={[
+                styles.genderButton,
+                gender === 'female' && styles.genderButtonSelected,
+              ]}
+              onPress={() => setGender('female')}
             >
-              <Picker.Item label="Select a gender" value="" />
-              <Picker.Item label="Male" value="male" />
-              <Picker.Item label="Female" value="female" />
-            </Picker>
-          </View>
-        </View>
+              <Ionicons
+                name="female"
+                size={24}
+                color={gender === 'female' ? 'white' : '#007AFF'}
+              />
+              <Text
+                style={[
+                  styles.genderButtonText,
+                  gender === 'female' && styles.genderButtonTextSelected,
+                ]}
+              >
+                女生
+              </Text>
+            </TouchableOpacity>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Personality</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={personality}
-              onValueChange={(value: string) => setPersonality(value)}
-              style={styles.picker}
+            <TouchableOpacity
+              style={[
+                styles.genderButton,
+                gender === 'male' && styles.genderButtonSelected,
+              ]}
+              onPress={() => setGender('male')}
             >
-              {personalities.map((item) => (
-                <Picker.Item key={item.value} label={item.label} value={item.value} />
-              ))}
-            </Picker>
+              <Ionicons
+                name="male"
+                size={24}
+                color={gender === 'male' ? 'white' : '#007AFF'}
+              />
+              <Text
+                style={[
+                  styles.genderButtonText,
+                  gender === 'male' && styles.genderButtonTextSelected,
+                ]}
+              >
+                男生
+              </Text>
+            </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Horoscope (Optional)</Text>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={horoscope}
-              onValueChange={(value: string) => setHoroscope(value)}
-              style={styles.picker}
-            >
-              {horoscopes.map((item) => (
-                <Picker.Item key={item.value} label={item.label} value={item.value} />
-              ))}
-            </Picker>
+          <Text style={styles.label}>性格 (可选)</Text>
+          <View style={styles.optionsContainer}>
+            {personalities.map((personality) => (
+              <TouchableOpacity
+                key={personality}
+                style={[
+                  styles.optionButton,
+                  selectedPersonality === personality && styles.optionButtonSelected,
+                ]}
+                onPress={() => setSelectedPersonality(personality)}
+              >
+                <Text
+                  style={[
+                    styles.optionButtonText,
+                    selectedPersonality === personality &&
+                      styles.optionButtonTextSelected,
+                  ]}
+                >
+                  {personality}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        </View>
 
-        <TouchableOpacity
-          style={[
-            styles.button,
-            (!name.trim() || !gender) && styles.buttonDisabled,
-          ]}
-          onPress={handleComplete}
-          disabled={!name.trim() || !gender}
-        >
-          <Text style={styles.buttonText}>Create My AI Friend</Text>
-        </TouchableOpacity>
+          <Text style={styles.label}>星座 (可选)</Text>
+          <View style={styles.optionsContainer}>
+            {horoscopes.map((horoscope) => (
+              <TouchableOpacity
+                key={horoscope}
+                style={[
+                  styles.optionButton,
+                  selectedHoroscope === horoscope && styles.optionButtonSelected,
+                ]}
+                onPress={() => setSelectedHoroscope(horoscope)}
+              >
+                <Text
+                  style={[
+                    styles.optionButtonText,
+                    selectedHoroscope === horoscope &&
+                      styles.optionButtonTextSelected,
+                  ]}
+                >
+                  {horoscope}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.completeButton, (!name || !gender) && styles.completeButtonDisabled]}
+            onPress={handleComplete}
+            disabled={!name || !gender}
+          >
+            <Text style={styles.completeButtonText}>完成</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -154,58 +213,132 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F8F9FD',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 24,
+    paddingTop: 60,
+  },
+  header: {
+    marginBottom: 40,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 30,
+    fontSize: 32,
+    fontWeight: '700',
     textAlign: 'center',
-    marginTop: 60,
+    color: '#1A1A1A',
+    marginBottom: 12,
   },
-  inputGroup: {
-    marginBottom: 20,
+  form: {
+    marginBottom: 30,
   },
   label: {
-    fontSize: 16,
-    marginBottom: 8,
+    fontSize: 17,
+    marginBottom: 12,
     fontWeight: '600',
+    color: '#1A1A1A',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+    borderColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 17,
+    backgroundColor: 'white',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  pickerContainer: {
+  genderContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  genderButton: {
+    flex: 1,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    overflow: 'hidden',
+    borderColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    flexDirection: 'row',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  picker: {
-    height: 50,
-  },
-  button: {
+  genderButtonSelected: {
     backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 8,
-    marginTop: 30,
+    borderColor: '#007AFF',
   },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
+  genderButtonText: {
+    color: '#666',
+    fontSize: 17,
+    fontWeight: '500',
   },
-  buttonText: {
+  genderButtonTextSelected: {
+    color: 'white',
+  },
+  optionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 24,
+  },
+  optionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 12,
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  optionButtonSelected: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  optionButtonText: {
+    color: '#666',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  optionButtonTextSelected: {
+    color: 'white',
+  },
+  completeButton: {
+    backgroundColor: '#007AFF',
+    padding: 18,
+    borderRadius: 16,
+    marginTop: 32,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  completeButtonDisabled: {
+    backgroundColor: '#A0A0A0',
+    shadowOpacity: 0,
+  },
+  completeButtonText: {
     color: 'white',
     textAlign: 'center',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
   },
 }); 
