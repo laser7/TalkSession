@@ -12,6 +12,10 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  PanResponder,
+  GestureResponderEvent,
+  PanResponderGestureState,
+  Linking,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import * as ImagePicker from 'expo-image-picker'
@@ -20,6 +24,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Message, generateAIResponse, loadConversationHistory, saveConversationHistory } from "./services/ai"
 import * as Notifications from 'expo-notifications'
 import { scheduleNextProactiveMessage } from './services/proactiveMessages'
+import { VoiceMessage } from './components/VoiceMessage'
+import { startRecording, stopRecording, cancelRecording } from './services/audio'
+import { Audio } from 'expo-av'
+import * as Speech from 'expo-speech-recognition'
+import { transcribeAudio } from './services/speech'
+import { RecordingOptionsPresets } from "expo-av/build/Audio/RecordingConstants"
 
 interface AIProfile {
   name: string
@@ -136,14 +146,27 @@ export default function ChatScreen() {
   const [isLoading, setIsLoading] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const [aiProfile, setAiProfile] = useState<AIProfile | null>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recording, setRecording] = useState<Audio.Recording | null>(null)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const [isShowAudioButton, setIsShowAudioButton] = useState(false)
+  const recordingTimer = useRef<NodeJS.Timeout | null>(null)
+  const recordingStartTime = useRef<number>(0)
   const flatListRef = useRef<FlatList>(null)
 
   // Request permissions when component mounts
   useEffect(() => {
     (async () => {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (status !== 'granted') {
+      // Request image picker permission
+      const imagePickerStatus = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (imagePickerStatus.status !== 'granted') {
         Alert.alert('抱歉', '我们需要相册权限才能使用这个功能！')
+      }
+
+      // Request microphone permission
+      const audioStatus = await Audio.requestPermissionsAsync()
+      if (audioStatus.status !== 'granted') {
+        Alert.alert('抱歉', '我们需要麦克风权限才能使用语音功能！')
       }
     })()
   }, [])
@@ -212,6 +235,28 @@ export default function ChatScreen() {
       }, 100); // Small delay to ensure render is complete
     }
   }, [messages, isInitializing]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimer.current) {
+        clearInterval(recordingTimer.current);
+      }
+    };
+  }, []);
+
+  // Cleanup recording when component unmounts
+  useEffect(() => {
+    return () => {
+      if (recordingTimer.current) {
+        clearInterval(recordingTimer.current);
+      }
+      // 确保在组件卸载时清理录音实例
+      cancelRecording().catch(error => {
+        console.error('清理录音失败:', error);
+      });
+    };
+  }, []);
 
   const pickImage = async () => {
     try {
@@ -315,34 +360,159 @@ export default function ChatScreen() {
     }
   }
 
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View
-      style={[
-        styles.messageContainer,
-        item.sender === "user" ? styles.userMessage : styles.aiMessage,
-      ]}
-    >
-      {item.type === "image" && item.imageUrl && (
-        <Image 
-          source={{ uri: item.imageUrl }} 
-          style={styles.messageImage}
-          resizeMode="cover"
+  const startRecording = async () => {
+    try {
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        {
+          android: {
+            extension: '.pcm',
+            outputFormat: Audio.AndroidOutputFormat.DEFAULT,
+            audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
+            sampleRate: 16000,
+            numberOfChannels: 1,
+          },
+          ios: {
+            extension: '.pcm',
+            audioQuality: Audio.IOSAudioQuality.HIGH,
+            sampleRate: 16000,
+            numberOfChannels: 1,
+            linearPCMBitDepth: 16,
+            linearPCMIsBigEndian: false,
+            linearPCMIsFloat: false,
+            bitRate: 128000,
+          },
+          web: {
+            mimeType: 'audio/pcm',
+            bitsPerSecond: 128000,
+          },
+        }
+      );
+
+      setRecording(recording);
+      setIsRecording(true);
+      recordingStartTime.current = Date.now();
+      
+      recordingTimer.current = setInterval(() => {
+        setRecordingDuration(Math.floor((Date.now() - recordingStartTime.current) / 1000));
+      }, 100);
+
+      await recording.startAsync();
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      Alert.alert('录音失败', '请检查麦克风权限并重试');
+    }
+  };
+
+  const handleStopRecording = async () => {
+    if (!recording) return;  // 检查recording实例是否存在
+    
+    try {
+      // 先停止计时器
+      if (recordingTimer.current) {
+        clearInterval(recordingTimer.current);
+      }
+
+      // 先设置状态为false，防止重复触发
+      setIsRecording(false);
+      setRecordingDuration(0);
+
+      const recordingDuration = Date.now() - recordingStartTime.current;
+      
+      if (recordingDuration < 1000) {
+        await recording.stopAndUnloadAsync();
+        setRecording(null);
+        Alert.alert('录音太短', '请按住录制语音消息');
+        return;
+      }
+
+      // 停止录音并获取录音文件
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      const duration = recordingDuration / 1000;  // 转换为秒
+      
+      // 清除recording实例
+      setRecording(null);
+      
+      if (!uri) {
+        throw new Error('无法获取录音文件');
+      }
+
+      // 开始语音识别
+      setIsLoading(true);
+      try {
+        // 使用语音识别服务将语音转换为文字
+        const transcribedText = await transcribeAudio(uri);
+        
+        // 创建语音消息
+        const newMessage: Message = {
+          id: Date.now().toString(),
+          text: transcribedText,
+          type: 'voice',
+          sender: 'user',
+          timestamp: new Date(),
+          audioUrl: uri,
+          duration: duration
+        };
+
+        setMessages(prev => [...prev, newMessage]);
+        
+        // 获取AI回复
+        const aiResponse = await generateAIResponse(transcribedText, messages);
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: aiResponse,
+          sender: "ai",
+          timestamp: new Date(),
+          type: "text",
+        };
+        
+        const updatedMessages = [...messages, newMessage, aiMessage];
+        setMessages(updatedMessages);
+        await saveConversationHistory(updatedMessages);
+      } catch (error) {
+        console.error('语音识别失败:', error);
+        Alert.alert('语音识别失败', '无法将语音转换为文字，请重试');
+      } finally {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('停止录音失败:', error);
+      Alert.alert('录音失败', '保存录音时出现错误，请重试');
+    }
+  };
+
+  const renderMessage = ({ item }: { item: Message }) => {
+    if (item.type === 'voice') {
+      return (
+        <VoiceMessage
+          audioUrl={item.audioUrl!}
+          duration={item.duration!}
+          isUser={item.sender === 'user'}
         />
-      )}
-      <Text style={[
-        styles.messageText,
-        item.sender === "user" ? styles.userMessageText : styles.aiMessageText
+      );
+    }
+    
+    // 原有的文本消息渲染逻辑
+    return (
+      <View style={[
+        styles.messageBubble,
+        item.sender === 'user' ? styles.userMessage : styles.aiMessage
       ]}>
-        {item.text}
-      </Text>
-      <Text style={[
-        styles.timestamp,
-        item.sender === "user" ? styles.userTimestamp : styles.aiTimestamp
-      ]}>
-        {item.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-      </Text>
-    </View>
-  )
+        <Text style={[
+          styles.messageText,
+          item.sender === 'user' ? styles.userMessageText : styles.aiMessageText
+        ]}>
+          {item.text}
+        </Text>
+      </View>
+    );
+  }
 
   if (isInitializing) {
     return (
@@ -412,24 +582,73 @@ export default function ChatScreen() {
         <TouchableOpacity style={styles.attachButton} onPress={pickImage}>
           <Ionicons name="image-outline" size={24} color="#007AFF" />
         </TouchableOpacity>
-        <TextInput
-          style={styles.input}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder={`给${aiProfile.name}发消息...`}
-          multiline
-        />
-        <TouchableOpacity
-          style={styles.sendButton}
-          onPress={sendMessage}
-          disabled={!inputText.trim() || isLoading}
-        >
-          <Ionicons
-            name="send"
-            size={24}
-            color={inputText.trim() && !isLoading ? "#007AFF" : "#ccc"}
-          />
-        </TouchableOpacity>
+
+        <View style={styles.inputWrapper}>
+          {inputText.trim() || !isShowAudioButton ? (
+            <>
+              <TextInput
+                style={styles.input}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder={`给${aiProfile?.name}发消息...`}
+                multiline
+              />
+              {inputText.trim() ? (
+                <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={sendMessage}
+                  disabled={!inputText.trim() || isLoading}
+                >
+                  <Ionicons
+                    name="send"
+                    size={24}
+                    color={inputText.trim() && !isLoading ? "#007AFF" : "#ccc"}
+                  />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.recordButton}
+                  onPress={() => {setIsShowAudioButton(true)}}
+                >
+                  <Ionicons
+                    name="mic"
+                    size={24}
+                    color="#007AFF"
+                  />
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <View style={styles.recordingModeContainer}>
+              <TouchableOpacity
+                style={styles.holdToTalkButton}
+                onLongPress={startRecording}
+                onPressOut={handleStopRecording}
+                activeOpacity={0.7}
+                delayLongPress={100}
+              >
+                {isRecording ? (
+                  <View style={styles.recordingIndicator}>
+                    <Ionicons name="radio-button-on" size={20} color="#FF3B30" />
+                    <Text style={styles.recordingTimer}>{recordingDuration}s</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.holdToTalkText}>按住说话</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelRecordingButton}
+                onPress={() => setIsShowAudioButton(false)}
+              >
+                <Ionicons
+                  name="close"
+                  size={20}
+                  color="#666"
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </View>
     </KeyboardAvoidingView>
   )
@@ -479,7 +698,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 24,
   },
-  messageContainer: {
+  messageBubble: {
     maxWidth: "80%",
     marginVertical: 4,
     padding: 12,
@@ -546,21 +765,56 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F1F6',
     borderRadius: 12,
   },
-  input: {
+  inputWrapper: {
     flex: 1,
-    marginHorizontal: 12,
-    padding: 12,
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
     backgroundColor: "#F0F1F6",
     borderRadius: 20,
+    paddingHorizontal: 12,
+  },
+  input: {
+    flex: 1,
     fontSize: 16,
-    maxHeight: 120,
+    paddingVertical: 10,
     color: "#1A1A1A",
+    maxHeight: 120,
   },
   sendButton: {
     padding: 8,
     backgroundColor: '#F0F1F6',
     borderRadius: 12,
+  },
+  recordButton: {
+    padding: 8,
+    borderRadius: 12,
+  },
+  recordingContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  recordingCancelled: {
+    opacity: 0.5,
+  },
+  recordingIndicatorCancelled: {
+    backgroundColor: '#999',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recordingTimer: {
+    fontSize: 15,
+    color: '#FF3B30',
+    marginLeft: 4,
+  },
+  recordingText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#666',
   },
   loadingContainer: {
     flex: 1,
@@ -600,5 +854,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 14,
     fontWeight: 'bold',
+  },
+  recordingHint: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingVertical: 8,
+    marginHorizontal: 40,
+    borderRadius: 20,
+  },
+  recordingHintText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  recordingModeContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  holdToTalkButton: {
+    flex: 1,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F0F1F6',
+    borderRadius: 18,
+  },
+  holdToTalkText: {
+    fontSize: 15,
+    color: '#007AFF',
+  },
+  cancelRecordingButton: {
+    padding: 8,
+    marginLeft: 8,
+    backgroundColor: '#F0F1F6',
+    borderRadius: 12,
   },
 }) 

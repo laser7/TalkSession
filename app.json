@@ -49,7 +49,8 @@
           "photosPermission": "Allow access to your photos to share images in the chat.",
           "cameraPermission": "Allow access to your camera to take photos for sharing in the chat."
         }
-      ]
+      ],
+      "expo-speech-recognition"
     ],
     "experiments": {
       "typedRoutes": true
