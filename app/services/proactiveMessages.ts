@@ -83,8 +83,8 @@ export const scheduleNextProactiveMessage = async () => {
         body: "Tap to view the message",
       },
       trigger: {
-        date: triggerDate,
-      },
+        seconds: delayHours * 60 * 60,
+      } as unknown as Notifications.NotificationTriggerInput,
     });
 
     // Save the scheduled time
@@ -111,10 +111,10 @@ export const sendProactiveMessage = async () => {
     // Generate the proactive message
     const prompt = getProactivePrompt(keyInfo);
     const aiResponse = await generateAIResponse(
-      prompt,
-      history,
       `You are ${profile.name}, a ${profile.gender} AI friend with a ${profile.personality || 'friendly'} personality. 
-      You're initiating a casual conversation with your friend. Keep it natural and reference previous conversations.`
+      You're initiating a casual conversation with your friend. Keep it natural and reference previous conversations.
+      ${prompt}`,
+      history
     );
 
     // Create and save the new message

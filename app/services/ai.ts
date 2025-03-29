@@ -8,11 +8,13 @@ const MAX_CONTEXT_MESSAGES = 10; // Number of previous messages to include for c
 
 export interface Message {
   id: string;
-  text: string;  // 改回单个字符串
+  text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
-  type: 'text' | 'image';
+  type: 'text' | 'image' | 'voice';
   imageUrl?: string;
+  audioUrl?: string;
+  duration?: number;
 }
 
 interface AIProfile {
